@@ -1,0 +1,59 @@
+// lib/models/ip_result.dart
+import 'package:myapp/services/virus_total_ip_service.dart';
+
+class IpResult {
+  final String ip;
+  final String asOwner;
+  final int asn;
+  final String country;
+  final String continent;
+  final Map<String, dynamic> detectionStats;
+  final String detectionPercentage;
+  final DateTime? lastAnalysisDate;
+  final int reputation;
+  final List<String> tags;
+  final List<Map<String, String>> topDetections;
+  final String regionalInternetRegistry;
+  final String network;
+
+  IpResult({
+    required this.ip,
+    required this.asOwner,
+    required this.asn,
+    required this.country,
+    required this.continent,
+    required this.detectionStats,
+    required this.detectionPercentage,
+    this.lastAnalysisDate,
+    required this.reputation,
+    required this.tags,
+    required this.topDetections,
+    required this.regionalInternetRegistry,
+    required this.network,
+  });
+
+  factory IpResult.fromVTResponse(Map<String, dynamic> vtResponse) {
+    // Get the details map from VirusTotalIpService
+    final details = VirusTotalIpService.extractIpDetails(vtResponse);
+
+    // Convert the map to an IpResult object
+    return IpResult(
+      ip: details['ip'] ?? 'Unknown',
+      asOwner: details['asOwner'] ?? 'Unknown',
+      asn: details['asn'] ?? 0,
+      country: details['country'] ?? 'Unknown',
+      continent: details['continent'] ?? 'Unknown',
+      detectionStats: details['detectionStats'] ?? {},
+      detectionPercentage: details['detectionPercentage'] ?? '0.0',
+      lastAnalysisDate: details['lastAnalysisDate'],
+      reputation: details['reputation'] ?? 0,
+      tags: List<String>.from(details['tags'] ?? []),
+      topDetections: List<Map<String, String>>.from(
+        details['topDetections'] ?? [],
+      ),
+      regionalInternetRegistry:
+          details['regionalInternetRegistry'] ?? 'Unknown',
+      network: details['network'] ?? 'Unknown',
+    );
+  }
+}

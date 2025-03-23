@@ -1,7 +1,9 @@
+// lib/helpers/database_helper.dart
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:myapp/services/osint_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -16,11 +18,11 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final path = join(await getDatabasesPath(), 'hash_database.db');
+    final path = join(await getDatabasesPath(), 'hash1_database.db');
 
     return await openDatabase(
       path,
-      version: 2, // Increase version number for migration
+      version: 3, // Set to version 3 for IP address support
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE hashes(
@@ -42,7 +44,31 @@ class DatabaseHelper {
           full_results TEXT,
           timestamp TEXT
         )
-      ''');
+        ''');
+
+        await db.execute('''
+        CREATE TABLE ip_addresses(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ip_address TEXT,
+          as_owner TEXT,
+          asn INTEGER,
+          country TEXT,
+          continent TEXT,
+          detection_count INTEGER,
+          detection_ratio TEXT,
+          last_seen TEXT,
+          reputation INTEGER,
+          tags TEXT,
+          av_labels TEXT,
+          whois_info TEXT,
+          resolutions TEXT,
+          geolocation TEXT,
+          is_tor_exit_node INTEGER,
+          abuse_score INTEGER,
+          full_results TEXT,
+          timestamp TEXT
+        )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -70,10 +96,38 @@ class DatabaseHelper {
             'ALTER TABLE hashes RENAME COLUMN results TO full_results',
           );
         }
+
+        if (oldVersion < 3) {
+          // Add new IP table when upgrading to version 3
+          await db.execute('''
+          CREATE TABLE ip_addresses(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT,
+            as_owner TEXT,
+            asn INTEGER,
+            country TEXT,
+            continent TEXT,
+            detection_count INTEGER,
+            detection_ratio TEXT,
+            last_seen TEXT,
+            reputation INTEGER,
+            tags TEXT,
+            av_labels TEXT,
+            whois_info TEXT,
+            resolutions TEXT,
+            geolocation TEXT,
+            is_tor_exit_node INTEGER,
+            abuse_score INTEGER,
+            full_results TEXT,
+            timestamp TEXT
+          )
+          ''');
+        }
       },
     );
   }
 
+  // File Hash Methods
   Future<void> insertHash(String hash, Map<String, dynamic> vtData) async {
     final db = await database;
 
@@ -151,8 +205,111 @@ class DatabaseHelper {
     return await db.query('hashes', orderBy: 'timestamp DESC');
   }
 
+  // IP Address Methods
+  Future<void> insertIp(
+    String ipAddress,
+    Map<String, dynamic> vtData, {
+    Map<String, dynamic>? osintData,
+  }) async {
+    final db = await database;
+
+    final attributes = vtData['data']['attributes'];
+    final stats = attributes['last_analysis_stats'];
+
+    // Extract the most relevant AV labels
+    List<String> avLabels = [];
+    if (attributes.containsKey('last_analysis_results')) {
+      final results = attributes['last_analysis_results'];
+      results.forEach((engine, result) {
+        if (result['category'] == 'malicious' && result['result'] != null) {
+          avLabels.add('${engine}: ${result['result']}');
+        }
+      });
+    }
+
+    // Calculate threat level based on detection ratio
+    String threatLevel = 'Clean';
+    if (stats['malicious'] > 0) {
+      double ratio =
+          stats['malicious'] /
+          (stats['malicious'] + stats['undetected'] + stats['harmless']);
+      if (ratio > 0.5)
+        threatLevel = 'High';
+      else if (ratio > 0.2)
+        threatLevel = 'Medium';
+      else
+        threatLevel = 'Low';
+    }
+
+    // Parse WHOIS information if available
+    Map<String, dynamic> whoisInfo = {};
+    if (attributes.containsKey('whois')) {
+      final whois = attributes['whois'] as String;
+      whoisInfo = OSINTService.parseWhoisData(whois);
+    }
+
+    // Prepare OSINT data
+    Map<String, dynamic> geoData = {};
+    bool isTorExitNode = false;
+    int abuseScore = 0;
+
+    if (osintData != null) {
+      if (osintData.containsKey('geolocation')) {
+        geoData = osintData['geolocation'];
+      }
+      if (osintData.containsKey('isTorExitNode')) {
+        isTorExitNode = osintData['isTorExitNode'];
+      }
+      if (osintData.containsKey('abuseipdb') &&
+          osintData['abuseipdb'].containsKey('data') &&
+          osintData['abuseipdb']['data'].containsKey('abuseConfidenceScore')) {
+        abuseScore = osintData['abuseipdb']['data']['abuseConfidenceScore'];
+      }
+    }
+
+    await db.insert('ip_addresses', {
+      'ip_address': ipAddress,
+      'as_owner': attributes['as_owner'] ?? 'Unknown',
+      'asn': attributes['asn'] ?? 0,
+      'country': attributes['country'] ?? 'Unknown',
+      'continent': attributes['continent'] ?? 'Unknown',
+      'detection_count': stats['malicious'] ?? 0,
+      'detection_ratio':
+          '${stats['malicious']}/${stats['malicious'] + stats['undetected'] + stats['harmless']}',
+      'last_seen':
+          attributes.containsKey('last_analysis_date')
+              ? DateTime.fromMillisecondsSinceEpoch(
+                attributes['last_analysis_date'] * 1000,
+              ).toIso8601String()
+              : null,
+      'reputation': attributes['reputation'] ?? 0,
+      'tags':
+          attributes.containsKey('tags')
+              ? jsonEncode(attributes['tags'])
+              : null,
+      'av_labels': jsonEncode(avLabels),
+      'whois_info': jsonEncode(whoisInfo),
+      'resolutions':
+          attributes.containsKey('resolutions')
+              ? jsonEncode(attributes['resolutions'])
+              : null,
+      'geolocation': jsonEncode(geoData),
+      'is_tor_exit_node': isTorExitNode ? 1 : 0,
+      'abuse_score': abuseScore,
+      'full_results': jsonEncode(vtData),
+      'timestamp': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getIpAddresses() async {
+    final db = await database;
+    return await db.query('ip_addresses', orderBy: 'timestamp DESC');
+  }
+
+  // Common Methods
   Future<void> clearDatabase() async {
     final db = await database;
     await db.delete('hashes');
+    await db.delete('ip_addresses');
   }
 }

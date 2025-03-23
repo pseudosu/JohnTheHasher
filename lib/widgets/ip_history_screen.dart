@@ -1,19 +1,19 @@
-// lib/widgets/hash_history_screen.dart
+// lib/widgets/ip_history_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:myapp/helpers/database_helper.dart';
-import 'package:myapp/screens/hash_detail_screen.dart';
+import 'package:myapp/screens/ip_detail_screen.dart';
 
-class HashHistoryScreen extends StatefulWidget {
-  const HashHistoryScreen({super.key});
+class IpHistoryScreen extends StatefulWidget {
+  const IpHistoryScreen({super.key});
 
   @override
-  State<HashHistoryScreen> createState() => _HashHistoryScreenState();
+  State<IpHistoryScreen> createState() => _IpHistoryScreenState();
 }
 
-class _HashHistoryScreenState extends State<HashHistoryScreen> {
-  List<Map<String, dynamic>> _hashHistory = [];
+class _IpHistoryScreenState extends State<IpHistoryScreen> {
+  List<Map<String, dynamic>> _ipHistory = [];
   bool _isLoading = true;
   String _filterBy = 'All'; // Can be 'All', 'Malicious', 'Clean'
 
@@ -29,9 +29,9 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
     });
 
     try {
-      final history = await DatabaseHelper.instance.getHashes();
+      final history = await DatabaseHelper.instance.getIpAddresses();
       setState(() {
-        _hashHistory = history;
+        _ipHistory = history;
         _isLoading = false;
       });
     } catch (e) {
@@ -39,15 +39,15 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading history: ${e.toString()}')),
+        SnackBar(content: Text('Error loading IP history: ${e.toString()}')),
       );
     }
   }
 
   List<Map<String, dynamic>> get _filteredHistory {
-    if (_filterBy == 'All') return _hashHistory;
+    if (_filterBy == 'All') return _ipHistory;
 
-    return _hashHistory.where((item) {
+    return _ipHistory.where((item) {
       final isMalicious = item['detection_count'] > 0;
       return (_filterBy == 'Malicious' && isMalicious) ||
           (_filterBy == 'Clean' && !isMalicious);
@@ -57,23 +57,13 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromRGBO(
-        240,
-        245,
-        249,
-        1,
-      ), // Light blue-gray background
+      backgroundColor: const Color.fromRGBO(240, 245, 249, 1),
       appBar: AppBar(
         title: const Text(
-          'Hash History',
+          'IP History',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color.fromRGBO(
-          25,
-          55,
-          109,
-          1,
-        ), // Navy blue AppBar
+        backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
         elevation: 4,
         actions: [
           // Filter button
@@ -124,9 +114,9 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      _hashHistory.isEmpty
-                          ? 'No hash search history'
-                          : 'No $_filterBy hash entries found',
+                      _ipHistory.isEmpty
+                          ? 'No IP search history'
+                          : 'No $_filterBy IP entries found',
                       style: const TextStyle(
                         fontSize: 18,
                         color: Color.fromRGBO(25, 55, 109, 1),
@@ -148,13 +138,13 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                           ? List<String>.from(jsonDecode(item['tags']))
                           : <String>[];
 
-                  final topLabels =
+                  final avLabels =
                       item['av_labels'] != null
                           ? List<String>.from(jsonDecode(item['av_labels']))
                           : <String>[];
 
                   // Take just the first two AV labels
-                  final displayLabels = topLabels.take(2).toList();
+                  final displayLabels = avLabels.take(2).toList();
 
                   return Card(
                     elevation: 3,
@@ -174,8 +164,7 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (context) => HashDetailScreen(hashData: item),
+                            builder: (context) => IpDetailScreen(ipData: item),
                           ),
                         );
                       },
@@ -183,7 +172,7 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header with file info
+                          // Header with IP info
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -231,8 +220,9 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
+                                      // lib/widgets/ip_history_screen.dart (continued)
                                       Text(
-                                        item['filename'] ?? 'Unknown file',
+                                        item['ip_address'] ?? 'Unknown IP',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -244,18 +234,19 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                       Row(
                                         children: [
                                           Text(
-                                            '${item['file_type'] ?? 'Unknown type'} • ',
+                                            '${item['as_owner'] ?? 'Unknown owner'} • ',
                                             style: TextStyle(
                                               color: Colors.black.withOpacity(
                                                 0.6,
                                               ),
                                               fontSize: 13,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           Text(
-                                            item['file_size'] != null
-                                                ? '${(item['file_size'] / 1024).toStringAsFixed(2)} KB'
-                                                : 'Unknown size',
+                                            item['country'] ??
+                                                'Unknown location',
                                             style: TextStyle(
                                               color: Colors.black.withOpacity(
                                                 0.6,
@@ -281,8 +272,7 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    item['threat_level'] ??
-                                        (isMalicious ? 'Malicious' : 'Clean'),
+                                    isMalicious ? 'Malicious' : 'Clean',
                                     style: TextStyle(
                                       color:
                                           isMalicious
@@ -296,24 +286,24 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                               ],
                             ),
                           ),
-                          // Hash and detection details
+                          // IP and detection details
                           Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Hash display with copy option
+                                // IP address with copy option
                                 Row(
                                   children: [
                                     const Icon(
-                                      Icons.fingerprint,
+                                      Icons.language,
                                       size: 16,
                                       color: Color.fromRGBO(25, 55, 109, 1),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        item['hash'],
+                                        item['ip_address'],
                                         style: const TextStyle(
                                           fontFamily: 'monospace',
                                           fontSize: 14,
@@ -326,16 +316,18 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () {
-                                        // Copy hash to clipboard
+                                        // Copy IP to clipboard
                                         Clipboard.setData(
-                                          ClipboardData(text: item['hash']),
+                                          ClipboardData(
+                                            text: item['ip_address'],
+                                          ),
                                         );
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(
                                           const SnackBar(
                                             content: Text(
-                                              'Hash copied to clipboard',
+                                              'IP copied to clipboard',
                                             ),
                                             duration: Duration(seconds: 1),
                                           ),
@@ -418,9 +410,9 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                       ),
                                     ),
                                   ),
-                                  if (topLabels.length > 2)
+                                  if (avLabels.length > 2)
                                     Text(
-                                      'And ${topLabels.length - 2} more...',
+                                      'And ${avLabels.length - 2} more...',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontStyle: FontStyle.italic,
@@ -492,7 +484,7 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                                   MaterialPageRoute(
                                     builder:
                                         (context) =>
-                                            HashDetailScreen(hashData: item),
+                                            IpDetailScreen(ipData: item),
                                   ),
                                 );
                               },
@@ -521,15 +513,15 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
 }
 
 // Content widget for use in tabs
-class HashHistoryContent extends StatefulWidget {
-  const HashHistoryContent({super.key});
+class IpHistoryContent extends StatefulWidget {
+  const IpHistoryContent({super.key});
 
   @override
-  State<HashHistoryContent> createState() => _HashHistoryContentState();
+  State<IpHistoryContent> createState() => _IpHistoryContentState();
 }
 
-class _HashHistoryContentState extends State<HashHistoryContent> {
-  List<Map<String, dynamic>> _hashHistory = [];
+class _IpHistoryContentState extends State<IpHistoryContent> {
+  List<Map<String, dynamic>> _ipHistory = [];
   bool _isLoading = true;
   String _filterBy = 'All'; // Can be 'All', 'Malicious', 'Clean'
 
@@ -545,9 +537,9 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
     });
 
     try {
-      final history = await DatabaseHelper.instance.getHashes();
+      final history = await DatabaseHelper.instance.getIpAddresses();
       setState(() {
-        _hashHistory = history;
+        _ipHistory = history;
         _isLoading = false;
       });
     } catch (e) {
@@ -555,15 +547,15 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading history: ${e.toString()}')),
+        SnackBar(content: Text('Error loading IP history: ${e.toString()}')),
       );
     }
   }
 
   List<Map<String, dynamic>> get _filteredHistory {
-    if (_filterBy == 'All') return _hashHistory;
+    if (_filterBy == 'All') return _ipHistory;
 
-    return _hashHistory.where((item) {
+    return _ipHistory.where((item) {
       final isMalicious = item['detection_count'] > 0;
       return (_filterBy == 'Malicious' && isMalicious) ||
           (_filterBy == 'Clean' && !isMalicious);
@@ -642,9 +634,9 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            _hashHistory.isEmpty
-                                ? 'No hash search history'
-                                : 'No $_filterBy hash entries found',
+                            _ipHistory.isEmpty
+                                ? 'No IP search history'
+                                : 'No $_filterBy IP entries found',
                             style: const TextStyle(
                               fontSize: 18,
                               color: Color.fromRGBO(25, 55, 109, 1),
@@ -666,7 +658,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                 ? List<String>.from(jsonDecode(item['tags']))
                                 : <String>[];
 
-                        final topLabels =
+                        final avLabels =
                             item['av_labels'] != null
                                 ? List<String>.from(
                                   jsonDecode(item['av_labels']),
@@ -674,7 +666,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                 : <String>[];
 
                         // Take just the first two AV labels
-                        final displayLabels = topLabels.take(2).toList();
+                        final displayLabels = avLabels.take(2).toList();
 
                         return Card(
                           elevation: 3,
@@ -695,8 +687,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                 context,
                                 MaterialPageRoute(
                                   builder:
-                                      (context) =>
-                                          HashDetailScreen(hashData: item),
+                                      (context) => IpDetailScreen(ipData: item),
                                 ),
                               );
                             },
@@ -704,7 +695,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Header with file info
+                                // Header with IP info
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -756,8 +747,8 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              item['filename'] ??
-                                                  'Unknown file',
+                                              item['ip_address'] ??
+                                                  'Unknown IP',
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 16,
@@ -769,17 +760,19 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                             Row(
                                               children: [
                                                 Text(
-                                                  '${item['file_type'] ?? 'Unknown type'} • ',
+                                                  '${item['as_owner'] ?? 'Unknown owner'} • ',
                                                   style: TextStyle(
                                                     color: Colors.black
                                                         .withOpacity(0.6),
                                                     fontSize: 13,
                                                   ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                                 Text(
-                                                  item['file_size'] != null
-                                                      ? '${(item['file_size'] / 1024).toStringAsFixed(2)} KB'
-                                                      : 'Unknown size',
+                                                  item['country'] ??
+                                                      'Unknown location',
                                                   style: TextStyle(
                                                     color: Colors.black
                                                         .withOpacity(0.6),
@@ -808,10 +801,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                           ),
                                         ),
                                         child: Text(
-                                          item['threat_level'] ??
-                                              (isMalicious
-                                                  ? 'Malicious'
-                                                  : 'Clean'),
+                                          isMalicious ? 'Malicious' : 'Clean',
                                           style: TextStyle(
                                             color:
                                                 isMalicious
@@ -825,18 +815,18 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                     ],
                                   ),
                                 ),
-                                // Hash and detection details
+                                // IP and detection details
                                 Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // Hash display with copy option
+                                      // IP address with copy option
                                       Row(
                                         children: [
                                           const Icon(
-                                            Icons.fingerprint,
+                                            Icons.language,
                                             size: 16,
                                             color: Color.fromRGBO(
                                               25,
@@ -848,7 +838,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              item['hash'],
+                                              item['ip_address'],
                                               style: const TextStyle(
                                                 fontFamily: 'monospace',
                                                 fontSize: 14,
@@ -864,10 +854,10 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(),
                                             onPressed: () {
-                                              // Copy hash to clipboard
+                                              // Copy IP to clipboard
                                               Clipboard.setData(
                                                 ClipboardData(
-                                                  text: item['hash'],
+                                                  text: item['ip_address'],
                                                 ),
                                               );
                                               ScaffoldMessenger.of(
@@ -875,7 +865,7 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                               ).showSnackBar(
                                                 const SnackBar(
                                                   content: Text(
-                                                    'Hash copied to clipboard',
+                                                    'IP copied to clipboard',
                                                   ),
                                                   duration: Duration(
                                                     seconds: 1,
@@ -966,9 +956,9 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                             ),
                                           ),
                                         ),
-                                        if (topLabels.length > 2)
+                                        if (avLabels.length > 2)
                                           Text(
-                                            'And ${topLabels.length - 2} more...',
+                                            'And ${avLabels.length - 2} more...',
                                             style: const TextStyle(
                                               fontSize: 12,
                                               fontStyle: FontStyle.italic,
@@ -1042,9 +1032,8 @@ class _HashHistoryContentState extends State<HashHistoryContent> {
                                         context,
                                         MaterialPageRoute(
                                           builder:
-                                              (context) => HashDetailScreen(
-                                                hashData: item,
-                                              ),
+                                              (context) =>
+                                                  IpDetailScreen(ipData: item),
                                         ),
                                       );
                                     },

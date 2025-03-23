@@ -1,5 +1,4 @@
 // lib/screens/main_screen.dart
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:myapp/services/virus_total_service.dart';
 import 'package:myapp/helpers/database_helper.dart';
@@ -154,6 +153,91 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ],
           ),
+    );
+  }
+}
+
+// Content widget for use in tabs
+class MainScreenContent extends StatefulWidget {
+  const MainScreenContent({super.key});
+
+  @override
+  State<MainScreenContent> createState() => _MainScreenContentState();
+}
+
+class _MainScreenContentState extends State<MainScreenContent> {
+  final TextEditingController _hashController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  Map<String, dynamic>? _results;
+
+  @override
+  void dispose() {
+    _hashController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitHash() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final hash = _hashController.text.trim();
+      final results = await VirusTotalService.checkHash(hash);
+
+      // Save to database with expanded data
+      await DatabaseHelper.instance.insertHash(hash, results);
+
+      setState(() {
+        _results = results;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: ListView(
+        children: [
+          // Input form card
+          HashInputForm(
+            hashController: _hashController,
+            formKey: _formKey,
+            isLoading: _isLoading,
+            onSubmit: _submitHash,
+          ),
+          const SizedBox(height: 20),
+
+          // Results card - conditionally visible
+          if (_results != null)
+            Card(
+              color: const Color.fromRGBO(45, 95, 155, 0.9),
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: HashResultsView(results: _results!),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

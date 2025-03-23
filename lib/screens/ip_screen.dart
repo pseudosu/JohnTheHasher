@@ -221,12 +221,35 @@ class _IpScreenContentState extends State<IpScreenContent> {
       try {
         whoisData = await VirusTotalIpService.getWhoisData(ipAddress);
       } catch (e) {
-        // WHOIS data is optional, so continue if it fails
         print('Error getting WHOIS data: $e');
+      }
+
+      // Get DNS records using our new service
+      List<Map<String, dynamic>> dnsRecords = [];
+      try {
+        print('Fetching DNS records for IP: $ipAddress');
+        dnsRecords = await OSINTService.getDnsRecords(ipAddress);
+
+        // If the primary DNS lookup fails, try the alternative
+        if (dnsRecords.isEmpty) {
+          print(
+            'Primary DNS lookup returned no results, trying alternative...',
+          );
+          dnsRecords = await OSINTService.getDnsRecordsAlternative(ipAddress);
+        }
+
+        print('Final DNS records count: ${dnsRecords.length}');
+      } catch (e) {
+        print('Error getting DNS records: $e');
       }
 
       // Get OSINT data in parallel
       final osintData = await _collectOsintData(ipAddress);
+
+      // Add DNS records to OSINT data
+      if (dnsRecords.isNotEmpty) {
+        osintData['dnsRecords'] = dnsRecords;
+      }
 
       // Save to database with OSINT data
       await DatabaseHelper.instance.insertIp(

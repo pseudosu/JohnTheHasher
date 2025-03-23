@@ -1,9 +1,10 @@
+// In lib/main.dart
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:myapp/screens/tabbed_main_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:myapp/utils/api_key_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,13 @@ class MyApp extends StatelessWidget {
         primaryColor: const Color.fromRGBO(240, 245, 249, 1),
         scaffoldBackgroundColor: const Color.fromRGBO(240, 245, 249, 1),
       ),
-      home: const TabbedMainScreen(),
+      home: Builder(
+        builder: (context) {
+          // Check for API keys and show notification if needed
+          ApiKeyChecker.checkApiKeysAndNotify(context);
+          return const TabbedMainScreen();
+        },
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:myapp/services/osint_service.dart';
 
 class VirusTotalIpService {
   static Future<Map<String, dynamic>> checkIp(String ipAddress) async {
@@ -59,24 +60,22 @@ class VirusTotalIpService {
   static Map<String, dynamic> extractIpDetails(
     Map<String, dynamic> vtResponse, {
     Map<String, dynamic>? whoisData,
+    List<Map<String, dynamic>>? dnsRecords,
   }) {
     final attributes = vtResponse['data']['attributes'];
-    final stats = attributes['last_analysis_stats'];
-
-    // Get the IP address from the response ID
-    final ipAddress = vtResponse['data']['id'] ?? 'Unknown';
+    final stats = attributes['last_analysis_stats'] ?? {};
 
     // Calculate detection percentage
     int total =
-        stats['malicious'] +
-        stats['undetected'] +
-        stats['harmless'] +
-        stats['suspicious'] +
-        stats['timeout'];
+        (stats['malicious'] ?? 0) +
+        (stats['undetected'] ?? 0) +
+        (stats['harmless'] ?? 0) +
+        (stats['suspicious'] ?? 0) +
+        (stats['timeout'] ?? 0);
     double detectionPercentage =
-        total > 0 ? (stats['malicious'] / total) * 100 : 0;
+        total > 0 ? (stats['malicious'] ?? 0) / total * 100 : 0;
 
-    // Extract top 5 security vendor detections
+    // Extract top 5 antivirus detections
     List<Map<String, String>> topDetections = [];
     if (attributes.containsKey('last_analysis_results')) {
       final results = attributes['last_analysis_results'];
@@ -93,47 +92,27 @@ class VirusTotalIpService {
       }
     }
 
-    // Extract hostname resolutions if available
-    List<Map<String, dynamic>> resolutions = [];
-    if (attributes.containsKey('last_https_certificate')) {
-      final cert = attributes['last_https_certificate'];
-      if (cert.containsKey('extensions') &&
-          cert['extensions'].containsKey('subject_alternative_name')) {
-        final altNames = cert['extensions']['subject_alternative_name'];
-        if (altNames is List) {
-          for (var name in altNames) {
-            resolutions.add({
-              'hostname': name,
-              'date':
-                  cert.containsKey('last_seen_date')
-                      ? DateTime.fromMillisecondsSinceEpoch(
-                        cert['last_seen_date'] * 1000,
-                      )
-                      : null,
-            });
-          }
-        }
-      }
-    }
+    // Use the provided DNS records if available, otherwise extract from VT response
+    List<Map<String, dynamic>> resolutions = dnsRecords ?? [];
 
-    // Extract domain resolutions from WHOIS data if provided
-    if (whoisData != null &&
-        whoisData.containsKey('data') &&
-        whoisData['data'] is List &&
-        whoisData['data'].isNotEmpty) {
-      for (var resolution in whoisData['data']) {
-        if (resolution.containsKey('attributes') &&
-            resolution['attributes'].containsKey('host_name')) {
+    // If no external DNS records provided, try to extract from VT response
+    if (resolutions.isEmpty && attributes.containsKey('last_dns_records')) {
+      try {
+        for (var record in attributes['last_dns_records']) {
           resolutions.add({
-            'hostname': resolution['attributes']['host_name'],
+            'type': record['type'] ?? 'Unknown',
+            'value': record['value'] ?? 'Unknown',
+            'ttl': record['ttl'] ?? 0,
             'date':
-                resolution['attributes'].containsKey('date')
+                attributes.containsKey('last_dns_records_date')
                     ? DateTime.fromMillisecondsSinceEpoch(
-                      resolution['attributes']['date'] * 1000,
+                      attributes['last_dns_records_date'] * 1000,
                     )
-                    : null,
+                    : DateTime.now(),
           });
         }
+      } catch (e) {
+        print('Error extracting DNS records from VT response: $e');
       }
     }
 
@@ -142,24 +121,11 @@ class VirusTotalIpService {
     if (attributes.containsKey('whois')) {
       final whois = attributes['whois'] as String;
       // Extract key WHOIS info with basic parsing
-      final regDateMatch = RegExp(
-        r'Registration Date: (.*?)\n',
-      ).firstMatch(whois);
-      final regOrgMatch = RegExp(r'Registrar: (.*?)\n').firstMatch(whois);
-      final adminContactMatch = RegExp(
-        r'Admin Email: (.*?)\n',
-      ).firstMatch(whois);
-
-      whoisInfo = {
-        'rawData': whois,
-        'registrationDate': regDateMatch?.group(1)?.trim(),
-        'registrar': regOrgMatch?.group(1)?.trim(),
-        'adminContact': adminContactMatch?.group(1)?.trim(),
-      };
+      whoisInfo = OSINTService.parseWhoisData(whois);
     }
 
     return {
-      'ip': attributes['network'] ?? ipAddress,
+      'ip': attributes['network'] ?? vtResponse['data']['id'],
       'asOwner': attributes['as_owner'] ?? 'Unknown',
       'asn': attributes['asn'] ?? 0,
       'country': attributes['country'] ?? 'Unknown',

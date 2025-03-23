@@ -5,9 +5,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class VirusTotalService {
   static Future<Map<String, dynamic>> checkHash(String hash) async {
     final apiKey = dotenv.env['VIRUSTOTAL_API_KEY'];
-    if (apiKey == null) {
+    if (apiKey == null || apiKey.isEmpty) {
       throw Exception(
-        'VirusTotal API key not found. Add it to your .env file.',
+        'VirusTotal API key not found. Please add it to your .env file as VIRUSTOTAL_API_KEY=your_key_here',
       );
     }
 

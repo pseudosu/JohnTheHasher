@@ -100,7 +100,7 @@ class IpInputForm extends StatelessWidget {
                           ),
                         )
                         : const Text(
-                          'Submit to VirusTotal',
+                          'Submit for Analysis',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

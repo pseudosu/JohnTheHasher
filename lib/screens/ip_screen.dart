@@ -82,12 +82,22 @@ class _IpScreenState extends State<IpScreen> {
   Future<Map<String, dynamic>> _collectOsintData(String ipAddress) async {
     final Map<String, dynamic> osintData = {};
 
-    // Get geolocation data
+    // Get geolocation data with fallback
     try {
-      final geoData = await OSINTService.getIpGeolocation(ipAddress);
+      print('Fetching geolocation data for IP: $ipAddress');
+      var geoData = await OSINTService.getIpGeolocation(ipAddress);
+
+      // If primary source fails, try alternative
+      if (geoData.containsKey('error') || geoData.isEmpty) {
+        print('Primary geolocation failed, trying alternative source');
+        geoData = await OSINTService.getIpGeolocationAlternative(ipAddress);
+      }
+
+      print('Final geolocation data: $geoData');
       osintData['geolocation'] = geoData;
     } catch (e) {
       print('Error getting geolocation data: $e');
+      osintData['geolocation'] = OSINTService.getFallbackGeolocation();
     }
 
     // Check if IP is a Tor exit node
@@ -96,6 +106,7 @@ class _IpScreenState extends State<IpScreen> {
       osintData['isTorExitNode'] = isTorExitNode;
     } catch (e) {
       print('Error checking Tor exit node: $e');
+      osintData['isTorExitNode'] = false;
     }
 
     // Check AbuseIPDB
@@ -104,8 +115,12 @@ class _IpScreenState extends State<IpScreen> {
       osintData['abuseipdb'] = abuseData;
     } catch (e) {
       print('Error checking AbuseIPDB: $e');
+      osintData['abuseipdb'] = {
+        'data': {'abuseConfidenceScore': 0},
+      };
     }
 
+    print('Collected OSINT data: $osintData');
     return osintData;
   }
 
@@ -241,12 +256,35 @@ class _IpScreenContentState extends State<IpScreenContent> {
   Future<Map<String, dynamic>> _collectOsintData(String ipAddress) async {
     final Map<String, dynamic> osintData = {};
 
-    // Get geolocation data
+    // Get geolocation data with multiple sources
     try {
-      final geoData = await OSINTService.getIpGeolocation(ipAddress);
+      print('Fetching geolocation data for IP: $ipAddress');
+      var geoData = await OSINTService.getIpGeolocation(ipAddress);
+
+      // Check if primary API returned useful data
+      if (isEmptyGeolocationData(geoData)) {
+        print(
+          'Primary geolocation returned limited data, trying alternative...',
+        );
+        // Small delay to avoid hitting rate limits
+        await Future.delayed(Duration(milliseconds: 500));
+
+        // Try alternative source
+        var alternativeGeoData = await OSINTService.getIpGeolocationAlternative(
+          ipAddress,
+        );
+
+        // Use the alternative data if it's better than the primary data
+        if (!isEmptyGeolocationData(alternativeGeoData)) {
+          geoData = alternativeGeoData;
+        }
+      }
+
+      print('Final geolocation data: $geoData');
       osintData['geolocation'] = geoData;
     } catch (e) {
       print('Error getting geolocation data: $e');
+      osintData['geolocation'] = OSINTService.getFallbackGeolocation();
     }
 
     // Check if IP is a Tor exit node
@@ -255,6 +293,7 @@ class _IpScreenContentState extends State<IpScreenContent> {
       osintData['isTorExitNode'] = isTorExitNode;
     } catch (e) {
       print('Error checking Tor exit node: $e');
+      osintData['isTorExitNode'] = false;
     }
 
     // Check AbuseIPDB
@@ -263,9 +302,22 @@ class _IpScreenContentState extends State<IpScreenContent> {
       osintData['abuseipdb'] = abuseData;
     } catch (e) {
       print('Error checking AbuseIPDB: $e');
+      osintData['abuseipdb'] = {
+        'data': {'abuseConfidenceScore': 0},
+      };
     }
 
+    print('Collected OSINT data: $osintData');
     return osintData;
+  }
+
+  bool isEmptyGeolocationData(Map<String, dynamic> geoData) {
+    // Check if the data is empty, has an error flag, or is missing critical fields
+    return geoData.isEmpty ||
+        geoData.containsKey('error') && geoData['error'] == true ||
+        (geoData['city'] == null &&
+            geoData['region'] == null &&
+            geoData['country_name'] == null);
   }
 
   @override

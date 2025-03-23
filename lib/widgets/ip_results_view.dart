@@ -17,6 +17,16 @@ class _IpResultsViewState extends State<IpResultsView> {
   final List<String> _tabs = ['Overview', 'WHOIS', 'Resolutions', 'OSINT'];
 
   @override
+  void initState() {
+    super.initState();
+    // Debug the OSINT data when the view initializes
+    print('IpResultsView initialized with OSINT data: ${widget.osintData}');
+    if (widget.osintData != null) {
+      print('Geolocation data: ${widget.osintData!['geolocation']}');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final attributes = widget.results['data']['attributes'];
     final stats = attributes['last_analysis_stats'] ?? {};
@@ -35,14 +45,31 @@ class _IpResultsViewState extends State<IpResultsView> {
             )
             : '0.0';
 
-    // Get OSINT data
+    // Get OSINT data with safe navigation and defaults
     final Map<String, dynamic> geoData =
-        widget.osintData != null && widget.osintData!['geolocation'] != null
+        widget.osintData != null && widget.osintData!.containsKey('geolocation')
             ? Map<String, dynamic>.from(widget.osintData!['geolocation'])
             : <String, dynamic>{};
-    final isTorExitNode = widget.osintData?['isTorExitNode'] ?? false;
+
+    // Debug the geolocation data before using it
+    print('Processed geoData: $geoData');
+
+    final isTorExitNode =
+        widget.osintData?.containsKey('isTorExitNode') == true
+            ? widget.osintData!['isTorExitNode'] ?? false
+            : false;
+
     final abuseScore =
-        widget.osintData?['abuseipdb']?['data']?['abuseConfidenceScore'] ?? 0;
+        widget.osintData?.containsKey('abuseipdb') == true &&
+                widget.osintData!['abuseipdb'] is Map &&
+                widget.osintData!['abuseipdb'].containsKey('data') &&
+                widget.osintData!['abuseipdb']['data'] is Map &&
+                widget.osintData!['abuseipdb']['data'].containsKey(
+                  'abuseConfidenceScore',
+                )
+            ? widget.osintData!['abuseipdb']['data']['abuseConfidenceScore'] ??
+                0
+            : 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,36 +413,63 @@ class _IpResultsViewState extends State<IpResultsView> {
     String rawWhois = '';
     Map<String, dynamic> parsedWhois = {};
 
-    if (attributes.containsKey('whois')) {
-      rawWhois = attributes['whois'] as String;
-      // Basic parsing of common WHOIS fields
-      final registrarMatch = RegExp(
-        r'Registrar:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
-      final orgMatch = RegExp(
-        r'Registrant Organization:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
-      final creationDateMatch = RegExp(
-        r'Creation Date:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
-      final updatedDateMatch = RegExp(
-        r'Updated Date:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
-      final expiryDateMatch = RegExp(
-        r'Registry Expiry Date:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
-      final nameServerMatch = RegExp(
-        r'Name Server:\s*(.*?)(?:\n|$)',
-      ).firstMatch(rawWhois);
+    if (attributes.containsKey('whois') && attributes['whois'] != null) {
+      try {
+        rawWhois = attributes['whois'] as String;
+        print('Raw WHOIS data available, length: ${rawWhois.length}');
 
-      parsedWhois = {
-        'Registrar': registrarMatch?.group(1)?.trim(),
-        'Organization': orgMatch?.group(1)?.trim(),
-        'Creation Date': creationDateMatch?.group(1)?.trim(),
-        'Updated Date': updatedDateMatch?.group(1)?.trim(),
-        'Expiry Date': expiryDateMatch?.group(1)?.trim(),
-        'Name Server': nameServerMatch?.group(1)?.trim(),
-      };
+        // Basic parsing of common WHOIS fields
+        final registrarMatch = RegExp(
+          r'Registrar:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final orgMatch = RegExp(
+          r'Registrant Organization:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final creationDateMatch = RegExp(
+          r'Creation Date:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final updatedDateMatch = RegExp(
+          r'Updated Date:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final expiryDateMatch = RegExp(
+          r'Registry Expiry Date:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final nameServerMatch = RegExp(
+          r'Name Server:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+
+        parsedWhois = {
+          'Registrar': registrarMatch?.group(1)?.trim(),
+          'Organization': orgMatch?.group(1)?.trim(),
+          'Creation Date': creationDateMatch?.group(1)?.trim(),
+          'Updated Date': updatedDateMatch?.group(1)?.trim(),
+          'Expiry Date': expiryDateMatch?.group(1)?.trim(),
+          'Name Server': nameServerMatch?.group(1)?.trim(),
+        };
+
+        // Also try IP whois fields
+        final cidrMatch = RegExp(r'CIDR:\s*(.*?)(?:\n|$)').firstMatch(rawWhois);
+        final netRangeMatch = RegExp(
+          r'NetRange:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+        final orgNameMatch = RegExp(
+          r'OrgName:\s*(.*?)(?:\n|$)',
+        ).firstMatch(rawWhois);
+
+        if (cidrMatch?.group(1)?.trim() != null) {
+          parsedWhois['CIDR'] = cidrMatch?.group(1)?.trim();
+        }
+        if (netRangeMatch?.group(1)?.trim() != null) {
+          parsedWhois['Network Range'] = netRangeMatch?.group(1)?.trim();
+        }
+        if (orgNameMatch?.group(1)?.trim() != null &&
+            parsedWhois['Organization'] == null) {
+          parsedWhois['Organization'] = orgNameMatch?.group(1)?.trim();
+        }
+      } catch (e) {
+        print('Error parsing WHOIS data: $e');
+        rawWhois = 'Error parsing WHOIS data: $e';
+      }
     }
 
     return Column(
@@ -504,21 +558,34 @@ class _IpResultsViewState extends State<IpResultsView> {
     // Parse domain resolutions
     List<Map<String, dynamic>> resolutions = [];
 
-    if (attributes.containsKey('last_dns_records')) {
-      for (var record in attributes['last_dns_records']) {
-        resolutions.add({
-          'type': record['type'],
-          'value': record['value'],
-          'ttl': record['ttl'],
-        });
+    if (attributes.containsKey('last_dns_records') &&
+        attributes['last_dns_records'] != null) {
+      try {
+        for (var record in attributes['last_dns_records']) {
+          resolutions.add({
+            'type': record['type'] ?? 'Unknown',
+            'value': record['value'] ?? 'Unknown',
+            'ttl': record['ttl'] ?? 0,
+          });
+        }
+        print('Parsed ${resolutions.length} DNS records');
+      } catch (e) {
+        print('Error parsing DNS records: $e');
       }
+    } else {
+      print('No DNS records found in attributes');
     }
 
-    if (attributes.containsKey('last_dns_records_date')) {
-      final date = DateTime.fromMillisecondsSinceEpoch(
-        attributes['last_dns_records_date'] * 1000,
-      );
-      resolutions = resolutions.map((r) => {...r, 'date': date}).toList();
+    if (attributes.containsKey('last_dns_records_date') &&
+        attributes['last_dns_records_date'] != null) {
+      try {
+        final date = DateTime.fromMillisecondsSinceEpoch(
+          attributes['last_dns_records_date'] * 1000,
+        );
+        resolutions = resolutions.map((r) => {...r, 'date': date}).toList();
+      } catch (e) {
+        print('Error adding date to DNS records: $e');
+      }
     }
 
     return Column(
@@ -696,6 +763,14 @@ class _IpResultsViewState extends State<IpResultsView> {
     bool isTorExitNode,
     int abuseScore,
   ) {
+    // Debug the geolocation data again at render time
+    print('Building OSINT tab with geoData: $geoData');
+
+    // Check if we have valid geolocation data
+    final bool hasGeoData =
+        geoData.isNotEmpty &&
+        !(geoData.length == 1 && geoData.containsKey('error'));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -710,9 +785,26 @@ class _IpResultsViewState extends State<IpResultsView> {
         ),
         const SizedBox(height: 8),
 
-        if (geoData.isNotEmpty) ...[
+        if (!hasGeoData) ...[
+          // Show placeholder when no geolocation data is available
+          Center(
+            child: Column(
+              children: [
+                const Icon(Icons.location_off, color: Colors.white60, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  'Geolocation data unavailable',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
           // City and Region
-          if (geoData.containsKey('city') && geoData.containsKey('region')) ...[
+          if (geoData.containsKey('city') &&
+              geoData['city'] != null &&
+              geoData.containsKey('region') &&
+              geoData['region'] != null) ...[
             Row(
               children: [
                 const Icon(
@@ -733,7 +825,8 @@ class _IpResultsViewState extends State<IpResultsView> {
           ],
 
           // Country
-          if (geoData.containsKey('country_name')) ...[
+          if (geoData.containsKey('country_name') &&
+              geoData['country_name'] != null) ...[
             Row(
               children: [
                 const Icon(Icons.flag, color: Colors.white70, size: 16),
@@ -750,7 +843,7 @@ class _IpResultsViewState extends State<IpResultsView> {
           ],
 
           // Postal
-          if (geoData.containsKey('postal')) ...[
+          if (geoData.containsKey('postal') && geoData['postal'] != null) ...[
             Row(
               children: [
                 const Icon(Icons.mail_outline, color: Colors.white70, size: 16),
@@ -767,7 +860,7 @@ class _IpResultsViewState extends State<IpResultsView> {
           ],
 
           // ISP
-          if (geoData.containsKey('org')) ...[
+          if (geoData.containsKey('org') && geoData['org'] != null) ...[
             Row(
               children: [
                 const Icon(Icons.business, color: Colors.white70, size: 16),
@@ -785,7 +878,9 @@ class _IpResultsViewState extends State<IpResultsView> {
 
           // Coordinates
           if (geoData.containsKey('latitude') &&
-              geoData.containsKey('longitude')) ...[
+              geoData['latitude'] != null &&
+              geoData.containsKey('longitude') &&
+              geoData['longitude'] != null) ...[
             Row(
               children: [
                 const Icon(Icons.my_location, color: Colors.white70, size: 16),
@@ -802,7 +897,8 @@ class _IpResultsViewState extends State<IpResultsView> {
           ],
 
           // Time Zone
-          if (geoData.containsKey('timezone')) ...[
+          if (geoData.containsKey('timezone') &&
+              geoData['timezone'] != null) ...[
             Row(
               children: [
                 const Icon(Icons.access_time, color: Colors.white70, size: 16),
@@ -816,11 +912,6 @@ class _IpResultsViewState extends State<IpResultsView> {
               ],
             ),
           ],
-        ] else ...[
-          const Text(
-            'No detailed geolocation data available',
-            style: TextStyle(color: Colors.white70),
-          ),
         ],
 
         const Divider(color: Colors.white30, height: 24),
@@ -961,7 +1052,7 @@ class _IpResultsViewState extends State<IpResultsView> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(color: Colors.white)),
+        Text(label, style: const TextStyle(color: Colors.white)),
       ],
     );
   }

@@ -255,15 +255,37 @@ class DatabaseHelper {
 
     if (osintData != null) {
       if (osintData.containsKey('geolocation')) {
-        geoData = osintData['geolocation'];
+        try {
+          // Ensure we can properly serialize the geolocation data
+          geoData = osintData['geolocation'];
+          print('Preparing to serialize geolocation data: $geoData');
+          final geoString = jsonEncode(geoData);
+          print('Successfully serialized geolocation data');
+        } catch (e) {
+          print('Error serializing geolocation data: $e');
+          // Provide fallback with only safe values
+          geoData = {
+            'city': geoData['city'] ?? 'Unknown',
+            'region': geoData['region'] ?? 'Unknown',
+            'country_name': geoData['country_name'] ?? 'Unknown',
+            'latitude':
+                (geoData['latitude'] is num) ? geoData['latitude'] : 0.0,
+            'longitude':
+                (geoData['longitude'] is num) ? geoData['longitude'] : 0.0,
+            'timezone': geoData['timezone'] ?? 'Unknown',
+          };
+        }
       }
       if (osintData.containsKey('isTorExitNode')) {
-        isTorExitNode = osintData['isTorExitNode'];
+        isTorExitNode = osintData['isTorExitNode'] ?? false;
       }
       if (osintData.containsKey('abuseipdb') &&
+          osintData['abuseipdb'] is Map &&
           osintData['abuseipdb'].containsKey('data') &&
+          osintData['abuseipdb']['data'] is Map &&
           osintData['abuseipdb']['data'].containsKey('abuseConfidenceScore')) {
-        abuseScore = osintData['abuseipdb']['data']['abuseConfidenceScore'];
+        abuseScore =
+            osintData['abuseipdb']['data']['abuseConfidenceScore'] ?? 0;
       }
     }
 

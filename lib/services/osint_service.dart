@@ -3,30 +3,157 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class OSINTService {
-  // Get Geolocation data
+  // Get Geolocation data with improved error handling and debugging
   static Future<Map<String, dynamic>> getIpGeolocation(String ipAddress) async {
     try {
+      // Use ip-api.com as primary source (has higher rate limits)
+      print('Making API request to ip-api.com for IP: $ipAddress');
       final response = await http.get(
-        Uri.parse('https://ipapi.co/$ipAddress/json/'),
+        Uri.parse('http://ip-api.com/json/$ipAddress'),
       );
 
+      print('ip-api.com response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        print('Successfully decoded geolocation JSON from ip-api.com: $data');
+
+        // Map the response to match our expected format
+        return {
+          'ip': ipAddress,
+          'city': data['city'],
+          'region': data['regionName'],
+          'country_name': data['country'],
+          'country_code': data['countryCode'],
+          'latitude': data['lat'],
+          'longitude': data['lon'],
+          'timezone': data['timezone'],
+          'org': data['isp'],
+          'postal': data['zip'],
+        };
       } else {
-        throw Exception(
-          'Failed to get geolocation data: ${response.statusCode}',
+        print(
+          'Failed to get geolocation data from ip-api.com: ${response.statusCode}',
         );
+        // If primary source fails, fall back to the getFallbackGeolocation method
+        return getFallbackGeolocation();
       }
     } catch (e) {
-      return {'error': e.toString()};
+      print('Exception during geolocation lookup from ip-api.com: $e');
+      return getFallbackGeolocation();
     }
+  }
+
+  // Alternative IP geolocation service as backup
+  static Future<Map<String, dynamic>> getIpGeolocationAlternative(
+    String ipAddress,
+  ) async {
+    try {
+      // Try freegeoip.app as an alternative
+      print(
+        'Making API request to alternative geolocation service for IP: $ipAddress',
+      );
+      final response = await http.get(
+        Uri.parse('https://ipinfo.io/$ipAddress/json'),
+      );
+
+      print('Alternative geolocation response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Successfully decoded alternative geolocation data: $data');
+
+        // Split the loc field which contains "latitude,longitude"
+        List<String> coordinates = ['0', '0'];
+        if (data.containsKey('loc') && data['loc'] is String) {
+          coordinates = data['loc'].split(',');
+        }
+
+        // Map the response to match our expected format
+        return {
+          'ip': data['ip'],
+          'city': data['city'],
+          'region': data['region'],
+          'country_name': data['country'],
+          'country_code': data['country'],
+          'latitude':
+              coordinates.length > 0
+                  ? double.tryParse(coordinates[0]) ?? 0.0
+                  : 0.0,
+          'longitude':
+              coordinates.length > 1
+                  ? double.tryParse(coordinates[1]) ?? 0.0
+                  : 0.0,
+          'timezone': data['timezone'],
+          'org': data['org'],
+          'postal': data['postal'],
+        };
+      } else {
+        print(
+          'Failed to get alternative geolocation data: ${response.statusCode}',
+        );
+        return getFallbackGeolocation();
+      }
+    } catch (e) {
+      print('Exception during alternative geolocation lookup: $e');
+      return getFallbackGeolocation();
+    }
+  }
+
+  // Fallback geolocation data to prevent UI errors
+  static Map<String, dynamic> getFallbackGeolocation() {
+    return {
+      'ip': 'Unknown',
+      'city': 'Unknown',
+      'region': 'Unknown',
+      'country_name': 'Unknown',
+      'country_code': 'XX',
+      'continent': 'Unknown',
+      'latitude': 0.0,
+      'longitude': 0.0,
+      'timezone': 'Unknown',
+      'org': 'Unknown',
+      'asn': '0',
+    };
+  }
+
+  // Helper to get continent from country code
+  static String _getContinentFromCountryCode(String countryCode) {
+    final Map<String, String> continentMap = {
+      'US': 'North America',
+      'CA': 'North America',
+      'MX': 'North America',
+      // Add more mappings as needed
+      'GB': 'Europe',
+      'DE': 'Europe',
+      'FR': 'Europe',
+      'ES': 'Europe',
+      'IT': 'Europe',
+      // Add more mappings as needed
+      'CN': 'Asia',
+      'JP': 'Asia',
+      'IN': 'Asia',
+      // Add more mappings as needed
+      'AU': 'Oceania',
+      'NZ': 'Oceania',
+      // Add more mappings as needed
+      'BR': 'South America',
+      'AR': 'South America',
+      // Add more mappings as needed
+      'ZA': 'Africa',
+      'EG': 'Africa',
+      // Add more mappings as needed
+    };
+
+    return continentMap[countryCode] ?? 'Unknown';
   }
 
   // Check for IP in known blocklists (AbuseIPDB)
   static Future<Map<String, dynamic>> checkAbuseIPDB(String ipAddress) async {
     try {
-      //Note: AbuseIPDB in progress
-      final apiKey = 'placeholder';
+      // Note: AbuseIPDB requires a valid API key
+      final apiKey =
+          '0e6eb1b1615b4bf9ff0cb0cf840bb476641f300fe443cab957e1d8dec5aee1b6df8a239cc492137f';
       final response = await http.get(
         Uri.parse(
           'https://api.abuseipdb.com/api/v2/check?ipAddress=$ipAddress',
@@ -35,12 +162,21 @@ class OSINTService {
       );
 
       if (response.statusCode == 200) {
+        print('AbuseIPDB response successful');
         return jsonDecode(response.body);
       } else {
-        throw Exception('Failed to check AbuseIPDB: ${response.statusCode}');
+        print('Failed to check AbuseIPDB: ${response.statusCode}');
+        return {
+          'error': response.statusCode.toString(),
+          'data': {'abuseConfidenceScore': 0},
+        };
       }
     } catch (e) {
-      return {'error': e.toString()};
+      print('Exception during AbuseIPDB check: $e');
+      return {
+        'error': e.toString(),
+        'data': {'abuseConfidenceScore': 0},
+      };
     }
   }
 
@@ -55,16 +191,17 @@ class OSINTService {
         final exitNodes = response.body.split('\n');
         for (var line in exitNodes) {
           if (line.contains('ExitAddress') && line.contains(ipAddress)) {
+            print('IP identified as Tor exit node');
             return true;
           }
         }
         return false;
       } else {
-        throw Exception(
-          'Failed to check Tor exit nodes: ${response.statusCode}',
-        );
+        print('Failed to check Tor exit nodes: ${response.statusCode}');
+        return false;
       }
     } catch (e) {
+      print('Exception during Tor exit node check: $e');
       return false;
     }
   }

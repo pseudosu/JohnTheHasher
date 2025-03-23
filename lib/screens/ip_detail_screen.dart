@@ -1,4 +1,3 @@
-// lib/screens/ip_detail_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,34 +34,115 @@ class _IpDetailScreenState extends State<IpDetailScreen>
     final fullResults = jsonDecode(widget.ipData['full_results']);
     final attributes = fullResults['data']['attributes'];
 
-    // Parse JSON fields
+    // Parse JSON fields with improved error handling
     final tagsList =
         widget.ipData['tags'] != null
-            ? List<String>.from(jsonDecode(widget.ipData['tags']))
+            ? (() {
+              try {
+                if (widget.ipData['tags'] is String) {
+                  return List<String>.from(jsonDecode(widget.ipData['tags']));
+                } else {
+                  return <String>[];
+                }
+              } catch (e) {
+                print('Error parsing tags: $e');
+                return <String>[];
+              }
+            })()
             : <String>[];
 
     final avLabels =
         widget.ipData['av_labels'] != null
-            ? List<String>.from(jsonDecode(widget.ipData['av_labels']))
+            ? (() {
+              try {
+                if (widget.ipData['av_labels'] is String) {
+                  return List<String>.from(
+                    jsonDecode(widget.ipData['av_labels']),
+                  );
+                } else {
+                  return <String>[];
+                }
+              } catch (e) {
+                print('Error parsing AV labels: $e');
+                return <String>[];
+              }
+            })()
             : <String>[];
 
     final geoData =
         widget.ipData['geolocation'] != null
-            ? Map<String, dynamic>.from(
-              jsonDecode(widget.ipData['geolocation']),
-            )
+            ? (() {
+              try {
+                // Check if it's already a Map or needs to be decoded from JSON
+                if (widget.ipData['geolocation'] is String) {
+                  final decoded = jsonDecode(widget.ipData['geolocation']);
+                  print('Successfully decoded geolocation JSON: $decoded');
+                  return Map<String, dynamic>.from(decoded);
+                } else if (widget.ipData['geolocation'] is Map) {
+                  return Map<String, dynamic>.from(
+                    widget.ipData['geolocation'],
+                  );
+                } else {
+                  print(
+                    'Unexpected geolocation type: ${widget.ipData['geolocation'].runtimeType}',
+                  );
+                  return <String, dynamic>{};
+                }
+              } catch (e) {
+                print('Error parsing geolocation data: $e');
+                return <String, dynamic>{};
+              }
+            })()
             : <String, dynamic>{};
+
+    // Debug the parsed geolocation data
+    print('Geolocation data in IP detail screen: $geoData');
 
     final whoisInfo =
         widget.ipData['whois_info'] != null
-            ? Map<String, dynamic>.from(jsonDecode(widget.ipData['whois_info']))
+            ? (() {
+              try {
+                if (widget.ipData['whois_info'] is String) {
+                  return Map<String, dynamic>.from(
+                    jsonDecode(widget.ipData['whois_info']),
+                  );
+                } else if (widget.ipData['whois_info'] is Map) {
+                  return Map<String, dynamic>.from(widget.ipData['whois_info']);
+                } else {
+                  return <String, dynamic>{};
+                }
+              } catch (e) {
+                print('Error parsing WHOIS info: $e');
+                return <String, dynamic>{};
+              }
+            })()
             : <String, dynamic>{};
 
     final resolutions =
         widget.ipData['resolutions'] != null
-            ? List<Map<String, dynamic>>.from(
-              jsonDecode(widget.ipData['resolutions']),
-            )
+            ? (() {
+              try {
+                if (widget.ipData['resolutions'] is String) {
+                  final decodedResolutions = jsonDecode(
+                    widget.ipData['resolutions'],
+                  );
+                  if (decodedResolutions is List) {
+                    return List<Map<String, dynamic>>.from(
+                      decodedResolutions.map(
+                        (item) =>
+                            item is Map
+                                ? Map<String, dynamic>.from(item)
+                                : <String, dynamic>{},
+                      ),
+                    );
+                  }
+                }
+                return <Map<String, dynamic>>[];
+              } catch (e) {
+                print('Error parsing resolutions: $e');
+                return <Map<String, dynamic>>[];
+              }
+            })()
             : <Map<String, dynamic>>[];
 
     final isTorExitNode = widget.ipData['is_tor_exit_node'] == 1;
@@ -426,38 +506,44 @@ class _IpDetailScreenState extends State<IpDetailScreen>
 
     // First try to get WHOIS data from attributes directly
     if (attributes.containsKey('whois') && attributes['whois'] != null) {
-      rawWhois = attributes['whois'] as String;
+      try {
+        rawWhois = attributes['whois'] as String;
+        print('Raw WHOIS data available, length: ${rawWhois.length}');
 
-      // Extract key WHOIS info using regular expressions
-      final networkRegex = RegExp(r'NetRange:\s*(.*?)(?:\n|$)');
-      final cidrRegex = RegExp(r'CIDR:\s*(.*?)(?:\n|$)');
-      final netNameRegex = RegExp(r'NetName:\s*(.*?)(?:\n|$)');
-      final orgRegex = RegExp(r'Organization:\s*(.*?)(?:\n|$)');
-      final regDateRegex = RegExp(r'RegDate:\s*(.*?)(?:\n|$)');
-      final updatedRegex = RegExp(r'Updated:\s*(.*?)(?:\n|$)');
-      final adminOrgRegex = RegExp(r'OrgName:\s*(.*?)(?:\n|$)');
-      final adminContactRegex = RegExp(r'OrgAbuseEmail:\s*(.*?)(?:\n|$)');
-      final countryRegex = RegExp(r'Country:\s*(.*?)(?:\n|$)');
-      final stateRegex = RegExp(r'StateProv:\s*(.*?)(?:\n|$)');
-      final cityRegex = RegExp(r'City:\s*(.*?)(?:\n|$)');
+        // Extract key WHOIS info using regular expressions
+        final networkRegex = RegExp(r'NetRange:\s*(.*?)(?:\n|$)');
+        final cidrRegex = RegExp(r'CIDR:\s*(.*?)(?:\n|$)');
+        final netNameRegex = RegExp(r'NetName:\s*(.*?)(?:\n|$)');
+        final orgRegex = RegExp(r'Organization:\s*(.*?)(?:\n|$)');
+        final regDateRegex = RegExp(r'RegDate:\s*(.*?)(?:\n|$)');
+        final updatedRegex = RegExp(r'Updated:\s*(.*?)(?:\n|$)');
+        final adminOrgRegex = RegExp(r'OrgName:\s*(.*?)(?:\n|$)');
+        final adminContactRegex = RegExp(r'OrgAbuseEmail:\s*(.*?)(?:\n|$)');
+        final countryRegex = RegExp(r'Country:\s*(.*?)(?:\n|$)');
+        final stateRegex = RegExp(r'StateProv:\s*(.*?)(?:\n|$)');
+        final cityRegex = RegExp(r'City:\s*(.*?)(?:\n|$)');
 
-      extractedWhois = {
-        'Network Range': _getRegexMatch(networkRegex, rawWhois),
-        'CIDR': _getRegexMatch(cidrRegex, rawWhois),
-        'Network Name': _getRegexMatch(netNameRegex, rawWhois),
-        'Organization':
-            _getRegexMatch(orgRegex, rawWhois) ??
-            _getRegexMatch(adminOrgRegex, rawWhois),
-        'Registration Date': _getRegexMatch(regDateRegex, rawWhois),
-        'Last Updated': _getRegexMatch(updatedRegex, rawWhois),
-        'Admin Contact': _getRegexMatch(adminContactRegex, rawWhois),
-        'Country': _getRegexMatch(countryRegex, rawWhois),
-        'State/Province': _getRegexMatch(stateRegex, rawWhois),
-        'City': _getRegexMatch(cityRegex, rawWhois),
-      };
+        extractedWhois = {
+          'Network Range': _getRegexMatch(networkRegex, rawWhois),
+          'CIDR': _getRegexMatch(cidrRegex, rawWhois),
+          'Network Name': _getRegexMatch(netNameRegex, rawWhois),
+          'Organization':
+              _getRegexMatch(orgRegex, rawWhois) ??
+              _getRegexMatch(adminOrgRegex, rawWhois),
+          'Registration Date': _getRegexMatch(regDateRegex, rawWhois),
+          'Last Updated': _getRegexMatch(updatedRegex, rawWhois),
+          'Admin Contact': _getRegexMatch(adminContactRegex, rawWhois),
+          'Country': _getRegexMatch(countryRegex, rawWhois),
+          'State/Province': _getRegexMatch(stateRegex, rawWhois),
+          'City': _getRegexMatch(cityRegex, rawWhois),
+        };
 
-      // Remove null entries
-      extractedWhois.removeWhere((key, value) => value == null);
+        // Remove null entries
+        extractedWhois.removeWhere((key, value) => value == null);
+      } catch (e) {
+        print('Error parsing WHOIS data: $e');
+        rawWhois = 'Error parsing WHOIS data: $e';
+      }
     }
 
     // Also use any pre-extracted WHOIS info from the database
@@ -740,6 +826,13 @@ class _IpDetailScreenState extends State<IpDetailScreen>
     int abuseScore,
     List<String> avLabels,
   ) {
+    // Check if geolocation data is valid
+    final bool hasGeoData =
+        geoData.isNotEmpty &&
+        !(geoData.length == 1 && geoData.containsKey('error'));
+
+    print('Building OSINT tab with hasGeoData: $hasGeoData');
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -762,7 +855,49 @@ class _IpDetailScreenState extends State<IpDetailScreen>
                   ),
                   const SizedBox(height: 16),
 
-                  if (geoData.isNotEmpty) ...[
+                  if (!hasGeoData) ...[
+                    // Show placeholder when no geolocation data is available
+                    Center(
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.location_off,
+                            color: Colors.grey,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Geolocation data unavailable',
+                            style: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              // Open a map online
+                              final ipAddress = widget.ipData['ip_address'];
+                              _launchUrl(
+                                'https://www.iplocation.net/ip-lookup?query=$ipAddress',
+                              );
+                            },
+                            icon: const Icon(Icons.search),
+                            label: const Text('Look up online'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color.fromRGBO(
+                                25,
+                                55,
+                                109,
+                                1,
+                              ),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
                     // Map in cards for each geo section with null checks
                     if (geoData['city'] != null &&
                         geoData['region'] != null) ...[
@@ -808,19 +943,33 @@ class _IpDetailScreenState extends State<IpDetailScreen>
                         Icons.access_time,
                         geoData['timezone'].toString(),
                       ),
-                  ] else ...[
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text(
-                          'No geolocation data available',
-                          style: TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey,
+
+                    // Add a button to view on map
+                    const SizedBox(height: 16),
+                    if (geoData['latitude'] != null &&
+                        geoData['longitude'] != null)
+                      Center(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final lat = geoData['latitude'];
+                            final lng = geoData['longitude'];
+                            _launchUrl(
+                              'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+                            );
+                          },
+                          icon: const Icon(Icons.map),
+                          label: const Text('View on Map'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromRGBO(
+                              25,
+                              55,
+                              109,
+                              1,
+                            ),
+                            foregroundColor: Colors.white,
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ],
               ),
@@ -1286,12 +1435,26 @@ class _IpDetailScreenState extends State<IpDetailScreen>
     // Geolocation data
     final geoData =
         widget.ipData['geolocation'] != null
-            ? Map<String, dynamic>.from(
-              jsonDecode(widget.ipData['geolocation']),
-            )
+            ? (() {
+              try {
+                if (widget.ipData['geolocation'] is String) {
+                  return Map<String, dynamic>.from(
+                    jsonDecode(widget.ipData['geolocation']),
+                  );
+                } else if (widget.ipData['geolocation'] is Map) {
+                  return Map<String, dynamic>.from(
+                    widget.ipData['geolocation'],
+                  );
+                }
+              } catch (e) {
+                print('Error parsing geolocation for report: $e');
+              }
+              return <String, dynamic>{};
+            })()
             : <String, dynamic>{};
 
-    if (geoData.isNotEmpty) {
+    if (geoData.isNotEmpty &&
+        !(geoData.length == 1 && geoData.containsKey('error'))) {
       report.writeln('');
       report.writeln('GEOLOCATION:');
       if (geoData['city'] != null && geoData['region'] != null) {

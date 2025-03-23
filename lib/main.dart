@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'John the Hasher',
+      title: 'Argus',
       theme: ThemeData(
         primaryColor: const Color.fromRGBO(240, 245, 249, 1),
         scaffoldBackgroundColor: const Color.fromRGBO(240, 245, 249, 1),

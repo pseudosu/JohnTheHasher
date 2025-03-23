@@ -39,6 +39,21 @@ class _TabbedMainScreenState extends State<TabbedMainScreen>
         ),
         backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
         elevation: 4,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => TabbedHistoryScreen(
+                      initialTabIndex: _tabController.index,
+                    ),
+              ),
+            );
+          },
+          icon: const Icon(Icons.history, color: Colors.white),
+          tooltip: 'History',
+        ),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -65,22 +80,6 @@ class _TabbedMainScreenState extends State<TabbedMainScreen>
           ],
         ),
         actions: [
-          // History button
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => TabbedHistoryScreen(
-                        initialTabIndex: _tabController.index,
-                      ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.history, color: Colors.white),
-            tooltip: 'History',
-          ),
           // Clear Database button
           IconButton(
             onPressed: _showClearDatabaseDialog,

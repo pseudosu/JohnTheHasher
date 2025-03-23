@@ -50,7 +50,6 @@ class _IpResultsViewState extends State<IpResultsView> {
         // IP Information Section
         Row(
           children: [
-            // lib/widgets/ip_results_view.dart (continued)
             const Icon(Icons.language, color: Colors.white, size: 22),
             const SizedBox(width: 8),
             Expanded(

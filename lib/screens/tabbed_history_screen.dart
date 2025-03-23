@@ -43,11 +43,13 @@ class _TabbedHistoryScreenState extends State<TabbedHistoryScreen>
         ),
         backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
         elevation: 4,
-        // In lib/screens/tabbed_history_screen.dart
+        iconTheme: const IconThemeData(color: Colors.white),
+
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
+
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           labelStyle: const TextStyle(

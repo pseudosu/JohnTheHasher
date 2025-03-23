@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -476,7 +478,6 @@ class HashDetailScreen extends StatelessWidget {
 
   // In lib/screens/hash_detail_screen.dart
 
-  // Add this method to the HashDetailScreen class
   void _shareHashReport(BuildContext context) {
     // Create a comprehensive summary report
     final StringBuffer report = StringBuffer();

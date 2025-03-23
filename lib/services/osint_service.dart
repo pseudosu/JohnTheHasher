@@ -1,5 +1,6 @@
 // lib/services/osint_service.dart
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class OSINTService {
@@ -117,43 +118,15 @@ class OSINTService {
     };
   }
 
-  // Helper to get continent from country code
-  static String _getContinentFromCountryCode(String countryCode) {
-    final Map<String, String> continentMap = {
-      'US': 'North America',
-      'CA': 'North America',
-      'MX': 'North America',
-      // Add more mappings as needed
-      'GB': 'Europe',
-      'DE': 'Europe',
-      'FR': 'Europe',
-      'ES': 'Europe',
-      'IT': 'Europe',
-      // Add more mappings as needed
-      'CN': 'Asia',
-      'JP': 'Asia',
-      'IN': 'Asia',
-      // Add more mappings as needed
-      'AU': 'Oceania',
-      'NZ': 'Oceania',
-      // Add more mappings as needed
-      'BR': 'South America',
-      'AR': 'South America',
-      // Add more mappings as needed
-      'ZA': 'Africa',
-      'EG': 'Africa',
-      // Add more mappings as needed
-    };
-
-    return continentMap[countryCode] ?? 'Unknown';
-  }
-
   // Check for IP in known blocklists (AbuseIPDB)
   static Future<Map<String, dynamic>> checkAbuseIPDB(String ipAddress) async {
     try {
-      // Note: AbuseIPDB requires a valid API key
-      final apiKey =
-          '0e6eb1b1615b4bf9ff0cb0cf840bb476641f300fe443cab957e1d8dec5aee1b6df8a239cc492137f';
+      final apiKey = dotenv.env['ABUSEIPDB_API_KEY'];
+      if (apiKey == null) {
+        throw Exception(
+          'VirusTotal API key not found. Add it to your .env file.',
+        );
+      }
       final response = await http.get(
         Uri.parse(
           'https://api.abuseipdb.com/api/v2/check?ipAddress=$ipAddress',

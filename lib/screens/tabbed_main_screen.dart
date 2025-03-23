@@ -34,7 +34,7 @@ class _TabbedMainScreenState extends State<TabbedMainScreen>
       backgroundColor: const Color.fromRGBO(240, 245, 249, 1),
       appBar: AppBar(
         title: const Text(
-          'John the Hasher',
+          'Argus',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: const Color.fromRGBO(25, 55, 109, 1),

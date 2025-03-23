@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:myapp/helpers/database_helper.dart';
+import 'package:myapp/screens/hash_detail_screen.dart';
 
 class HashHistoryScreen extends StatefulWidget {
   const HashHistoryScreen({super.key});
@@ -12,6 +14,7 @@ class HashHistoryScreen extends StatefulWidget {
 class _HashHistoryScreenState extends State<HashHistoryScreen> {
   List<Map<String, dynamic>> _hashHistory = [];
   bool _isLoading = true;
+  String _filterBy = 'All'; // Can be 'All', 'Malicious', 'Clean'
 
   @override
   void initState() {
@@ -40,67 +43,121 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _filteredHistory {
+    if (_filterBy == 'All') return _hashHistory;
+
+    return _hashHistory.where((item) {
+      final isMalicious = item['detection_count'] > 0;
+      return (_filterBy == 'Malicious' && isMalicious) ||
+          (_filterBy == 'Clean' && !isMalicious);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Security-focused background color - light blue-gray
-      backgroundColor: const Color.fromRGBO(240, 245, 249, 1),
+      backgroundColor: const Color.fromRGBO(
+        240,
+        245,
+        249,
+        1,
+      ), // Light blue-gray background
       appBar: AppBar(
         title: const Text(
           'Hash History',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        // Navy blue AppBar
-        backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
+        backgroundColor: const Color.fromRGBO(
+          25,
+          55,
+          109,
+          1,
+        ), // Navy blue AppBar
+        elevation: 4,
+        actions: [
+          // Filter button
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.filter_list, color: Colors.white),
+            onSelected: (value) {
+              setState(() {
+                _filterBy = value;
+              });
+            },
+            itemBuilder:
+                (context) => [
+                  const PopupMenuItem(value: 'All', child: Text('Show All')),
+                  const PopupMenuItem(
+                    value: 'Malicious',
+                    child: Text('Malicious Only'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'Clean',
+                    child: Text('Clean Only'),
+                  ),
+                ],
+          ),
+          // Refresh button
+          IconButton(
+            onPressed: _loadHistory,
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Refresh History',
+          ),
+        ],
       ),
       body:
           _isLoading
               ? const Center(
                 child: CircularProgressIndicator(
-                  // Match the loading indicator to the app theme
                   color: Color.fromRGBO(25, 55, 109, 1),
                 ),
               )
-              : _hashHistory.isEmpty
-              ? const Center(
-                child: Text(
-                  'No hash search history',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color.fromRGBO(25, 55, 109, 1),
-                  ),
+              : _filteredHistory.isEmpty
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.history_toggle_off,
+                      color: Color.fromRGBO(25, 55, 109, 0.5),
+                      size: 64,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _hashHistory.isEmpty
+                          ? 'No hash search history'
+                          : 'No $_filterBy hash entries found',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        color: Color.fromRGBO(25, 55, 109, 1),
+                      ),
+                    ),
+                  ],
                 ),
               )
               : ListView.builder(
-                itemCount: _hashHistory.length,
+                padding: const EdgeInsets.all(12),
+                itemCount: _filteredHistory.length,
                 itemBuilder: (context, index) {
-                  final item = _hashHistory[index];
-                  final results = jsonDecode(item['results']);
-                  final stats =
-                      results['data']['attributes']['last_analysis_stats'];
-                  final isMalicious = stats['malicious'] > 0;
+                  final item = _filteredHistory[index];
+                  final isMalicious = item['detection_count'] > 0;
+
+                  // Parse json fields
+                  final tagsList =
+                      item['tags'] != null
+                          ? List<String>.from(jsonDecode(item['tags']))
+                          : <String>[];
+
+                  final topLabels =
+                      item['av_labels'] != null
+                          ? List<String>.from(jsonDecode(item['av_labels']))
+                          : <String>[];
+
+                  // Take just the first two AV labels
+                  final displayLabels = topLabels.take(2).toList();
 
                   return Card(
                     elevation: 3,
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    // Card color based on malicious status
-                    color:
-                        isMalicious
-                            ? const Color.fromRGBO(
-                              255,
-                              235,
-                              235,
-                              1,
-                            ) // Light red for malicious
-                            : const Color.fromRGBO(
-                              235,
-                              255,
-                              235,
-                              1,
-                            ), // Light green for clean
+                    margin: const EdgeInsets.only(bottom: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
@@ -111,87 +168,349 @@ class _HashHistoryScreenState extends State<HashHistoryScreen> {
                         width: 1,
                       ),
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      title: Text(
-                        item['filename'],
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color:
-                              isMalicious
-                                  ? const Color.fromRGBO(
-                                    180,
-                                    0,
-                                    0,
-                                    1,
-                                  ) // Darker red for malicious text
-                                  : const Color.fromRGBO(
-                                    0,
-                                    120,
-                                    0,
-                                    1,
-                                  ), // Darker green for clean text
-                        ),
-                      ),
-                      subtitle: Column(
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => HashDetailScreen(hashData: item),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 4),
-                          Text(
-                            'Hash: ${item['hash']}',
-                            style: const TextStyle(
-                              color: Colors.black87,
-                              fontSize: 13,
+                          // Header with file info
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  isMalicious
+                                      ? Colors.red.withOpacity(0.1)
+                                      : Colors.green.withOpacity(0.1),
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(12),
+                                topRight: Radius.circular(12),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        isMalicious
+                                            ? Colors.red.withOpacity(0.2)
+                                            : Colors.green.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      isMalicious
+                                          ? Icons.warning
+                                          : Icons.check_circle,
+                                      color:
+                                          isMalicious
+                                              ? Colors.red
+                                              : Colors.green,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item['filename'] ?? 'Unknown file',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${item['file_type'] ?? 'Unknown type'} • ',
+                                            style: TextStyle(
+                                              color: Colors.black.withOpacity(
+                                                0.6,
+                                              ),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          Text(
+                                            item['file_size'] != null
+                                                ? '${(item['file_size'] / 1024).toStringAsFixed(2)} KB'
+                                                : 'Unknown size',
+                                            style: TextStyle(
+                                              color: Colors.black.withOpacity(
+                                                0.6,
+                                              ),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        isMalicious
+                                            ? Colors.red.withOpacity(0.2)
+                                            : Colors.green.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    item['threat_level'] ??
+                                        (isMalicious ? 'Malicious' : 'Clean'),
+                                    style: TextStyle(
+                                      color:
+                                          isMalicious
+                                              ? Colors.red
+                                              : Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                isMalicious
-                                    ? Icons.warning
-                                    : Icons.check_circle,
-                                size: 16,
-                                color: isMalicious ? Colors.red : Colors.green,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Disposition: ${stats['malicious']} / '
-                                '${stats['malicious'] + stats['undetected'] + stats['harmless']}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      isMalicious ? Colors.red : Colors.green,
+                          // Hash and detection details
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Hash display with copy option
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.fingerprint,
+                                      size: 16,
+                                      color: Color.fromRGBO(25, 55, 109, 1),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        item['hash'],
+                                        style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: 14,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.copy, size: 16),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        // Copy hash to clipboard
+                                        Clipboard.setData(
+                                          ClipboardData(text: item['hash']),
+                                        );
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Hash copied to clipboard',
+                                            ),
+                                            duration: Duration(seconds: 1),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Detection ratio
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            isMalicious
+                                                ? Colors.red.withOpacity(0.1)
+                                                : Colors.green.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Detection: ${item['detection_ratio'] ?? '0/0'}',
+                                        style: TextStyle(
+                                          color:
+                                              isMalicious
+                                                  ? Colors.red
+                                                  : Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      size: 12,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      item['timestamp'] != null
+                                          ? DateTime.parse(
+                                            item['timestamp'],
+                                          ).toString().substring(0, 10)
+                                          : 'Unknown date',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // AV detection names
+                                if (displayLabels.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Detection Names:',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  ...displayLabels.map(
+                                    (label) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 2),
+                                      child: Text(
+                                        '• $label',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  if (topLabels.length > 2)
+                                    Text(
+                                      'And ${topLabels.length - 2} more...',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                ],
+                                // Tags
+                                if (tagsList.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children:
+                                        tagsList
+                                            .take(3) // Show max 3 tags
+                                            .map(
+                                              (tag) => Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color.fromRGBO(
+                                                    25,
+                                                    55,
+                                                    109,
+                                                    0.1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  tag,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Color.fromRGBO(
+                                                      25,
+                                                      55,
+                                                      109,
+                                                      1,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          // View details button
+                          Container(
+                            width: double.infinity,
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                top: BorderSide(
+                                  color: Colors.black12,
+                                  width: 1,
                                 ),
                               ),
-                            ],
+                            ),
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            HashDetailScreen(hashData: item),
+                                  ),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color.fromRGBO(
+                                  25,
+                                  55,
+                                  109,
+                                  1,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                              ),
+                              child: const Text('VIEW FULL DETAILS'),
+                            ),
                           ),
                         ],
                       ),
-                      trailing: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color.fromRGBO(25, 55, 109, 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          DateTime.parse(
-                            item['timestamp'],
-                          ).toString().substring(0, 16),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: Color.fromRGBO(25, 55, 109, 1),
-                          ),
-                        ),
-                      ),
-                      onTap: () {
-                        // We'll implement this later
-                      },
                     ),
                   );
                 },

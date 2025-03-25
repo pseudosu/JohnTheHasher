@@ -1,4 +1,6 @@
 // lib/widgets/ip_input_form.dart
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 
 class IpInputForm extends StatelessWidget {

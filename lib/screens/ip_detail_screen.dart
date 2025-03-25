@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print, deprecated_member_use, use_build_context_synchronously
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -675,6 +677,32 @@ class _IpDetailScreenState extends State<IpDetailScreen>
   }
 
   Widget _buildDnsTab(List<Map<String, dynamic>> resolutions) {
+    // First, ensure we have correct data
+    print('Building DNS tab with ${resolutions.length} records');
+
+    // If the resolutions is a JSON string, try to parse it
+    if (resolutions.isEmpty && widget.ipData.containsKey('dns_data')) {
+      try {
+        print('Trying to parse dns_data directly');
+        final dnsData = widget.ipData['dns_data'];
+        if (dnsData != null && dnsData is String) {
+          final parsed = jsonDecode(dnsData);
+          if (parsed is List) {
+            resolutions = List<Map<String, dynamic>>.from(
+              parsed.map(
+                (item) => item is Map ? Map<String, dynamic>.from(item) : {},
+              ),
+            );
+            print(
+              'Successfully parsed ${resolutions.length} DNS records from dns_data',
+            );
+          }
+        }
+      } catch (e) {
+        print('Error parsing dns_data: $e');
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Card(
@@ -715,101 +743,192 @@ class _IpDetailScreenState extends State<IpDetailScreen>
               const SizedBox(height: 16),
 
               if (resolutions.isNotEmpty) ...[
-                // Create a data table for DNS records
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Type')),
-                      DataColumn(label: Text('Value')),
-                      DataColumn(label: Text('Date')),
-                      DataColumn(label: Text('TTL')),
-                    ],
-                    rows:
-                        resolutions.map((resolution) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: resolutions.length,
+                  itemBuilder: (context, index) {
+                    final resolution = resolutions[index];
+                    print('Rendering DNS record: $resolution');
+
+                    // Safely extract values with debug output
+                    final String recordType = resolution['type'] ?? 'Unknown';
+                    print('Record type: $recordType');
+
+                    final String recordValue = resolution['value'] ?? 'Unknown';
+                    print('Record value: $recordValue');
+
+                    final String recordSource =
+                        resolution['source'] ?? 'Unknown';
+                    print('Record source: $recordSource');
+
+                    final dynamic recordTtl = resolution['ttl'] ?? 0;
+
+                    final String recordDate =
+                        resolution.containsKey('date') &&
+                                resolution['date'] != null
+                            ? resolution['date'].toString().substring(0, 10)
+                            : 'Unknown date';
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Record type badge and value
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color.fromRGBO(
-                                      25,
-                                      55,
-                                      109,
-                                      0.1,
-                                    ),
+                                    color: _getRecordTypeColor(recordType),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    resolution['type']?.toString() ?? 'A',
+                                    recordType,
                                     style: const TextStyle(
+                                      color: Colors.white,
                                       fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ),
-                              ),
-                              DataCell(
-                                SelectableText(
-                                  resolution['value']?.toString() ?? 'Unknown',
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SelectableText(
+                                        recordValue,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Source: $recordSource',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              DataCell(
+                              ],
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Additional details in a muted row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
                                 Text(
-                                  resolution.containsKey('date') &&
-                                          resolution['date'] != null
-                                      ? resolution['date'].toString().substring(
-                                        0,
-                                        10,
-                                      )
-                                      : '-',
+                                  'TTL: $recordTtl',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
-                              ),
-                              DataCell(
                                 Text(
-                                  resolution.containsKey('ttl') &&
-                                          resolution['ttl'] != null
-                                      ? resolution['ttl'].toString()
-                                      : '-',
+                                  recordDate,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // Add copy button for the domain value
+                            if (recordType != 'INFO') ...[
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                      ClipboardData(text: recordValue),
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Domain copied to clipboard',
+                                        ),
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.copy, size: 14),
+                                  label: const Text('Copy'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
                                 ),
                               ),
                             ],
-                          );
-                        }).toList(),
-                  ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ] else ...[
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'No domain resolution data available',
-                      style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Button to lookup DNS info online
                 Center(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        () => _launchUrl(
-                          'https://viewdns.info/reverseip/?host=${widget.ipData['ip_address']}&t=1',
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.domain_disabled,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No domain information available',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
                         ),
-                    icon: const Icon(Icons.search),
-                    label: const Text('Lookup DNS Records Online'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
-                      foregroundColor: Colors.white,
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'This IP address doesn\'t have associated domain records',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Button to lookup DNS info online
+                      ElevatedButton.icon(
+                        onPressed:
+                            () => _launchUrl(
+                              'https://viewdns.info/reverseip/?host=${widget.ipData['ip_address']}&t=1',
+                            ),
+                        icon: const Icon(Icons.search),
+                        label: const Text('Search Online'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color.fromRGBO(25, 55, 109, 1),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -818,6 +937,34 @@ class _IpDetailScreenState extends State<IpDetailScreen>
         ),
       ),
     );
+  }
+
+  // Helper method to get colors for different record types
+  Color _getRecordTypeColor(String recordType) {
+    switch (recordType) {
+      case 'A':
+        return Colors.blue;
+      case 'AAAA':
+        return Colors.indigo;
+      case 'CNAME':
+        return Colors.purple;
+      case 'MX':
+        return Colors.amber;
+      case 'TXT':
+        return Colors.teal;
+      case 'NS':
+        return Colors.deepOrange;
+      case 'PTR':
+        return Colors.green;
+      case 'SOA':
+        return Colors.brown;
+      case 'SRV':
+        return Colors.cyan;
+      case 'INFO':
+        return Colors.grey;
+      default:
+        return Colors.blueGrey;
+    }
   }
 
   Widget _buildOsintTab(

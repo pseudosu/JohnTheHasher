@@ -1,6 +1,9 @@
 // lib/widgets/ip_results_view.dart
+// ignore_for_file: deprecated_member_use, avoid_print, sized_box_for_whitespace
+
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class IpResultsView extends StatefulWidget {
   final Map<String, dynamic> results;
@@ -162,7 +165,7 @@ class _IpResultsViewState extends State<IpResultsView> {
             _buildWhoisTab(attributes),
 
             // Resolutions Tab
-            _buildResolutionsTab(attributes),
+            _buildDnsTab(attributes),
 
             // OSINT Tab
             _buildOsintTab(geoData, isTorExitNode, abuseScore),
@@ -554,38 +557,95 @@ class _IpResultsViewState extends State<IpResultsView> {
     );
   }
 
-  Widget _buildResolutionsTab(Map<String, dynamic> attributes) {
+  Widget _buildDnsTab(Map<String, dynamic> attributes) {
     // Parse domain resolutions
     List<Map<String, dynamic>> resolutions = [];
 
-    if (attributes.containsKey('last_dns_records') &&
-        attributes['last_dns_records'] != null) {
+    print('Building DNS tab in results view');
+
+    // First try to get from dns_data
+    if (widget.osintData != null &&
+        widget.osintData!.containsKey('dnsRecords')) {
       try {
+        final dnsRecords = widget.osintData!['dnsRecords'];
+        print('Found dnsRecords in osintData: $dnsRecords');
+
+        if (dnsRecords is List) {
+          for (var record in dnsRecords) {
+            if (record is Map) {
+              resolutions.add(Map<String, dynamic>.from(record));
+            }
+          }
+          print(
+            'Successfully parsed ${resolutions.length} DNS records from osintData',
+          );
+        }
+      } catch (e) {
+        print('Error parsing dns records from osintData: $e');
+      }
+    }
+
+    // If no records found yet, try from attributes
+    if (resolutions.isEmpty && attributes.containsKey('last_dns_records')) {
+      try {
+        print('Trying to get DNS records from attributes');
         for (var record in attributes['last_dns_records']) {
           resolutions.add({
             'type': record['type'] ?? 'Unknown',
             'value': record['value'] ?? 'Unknown',
             'ttl': record['ttl'] ?? 0,
+            'date': DateTime.now().toIso8601String(),
+            'source': 'VirusTotal',
           });
         }
-        print('Parsed ${resolutions.length} DNS records');
+        print('Found ${resolutions.length} DNS records in attributes');
       } catch (e) {
-        print('Error parsing DNS records: $e');
+        print('Error parsing DNS records from attributes: $e');
       }
-    } else {
-      print('No DNS records found in attributes');
     }
 
-    if (attributes.containsKey('last_dns_records_date') &&
-        attributes['last_dns_records_date'] != null) {
+    // If still no records, check 'resolutions' field for backward compatibility
+    if (resolutions.isEmpty) {
       try {
-        final date = DateTime.fromMillisecondsSinceEpoch(
-          attributes['last_dns_records_date'] * 1000,
-        );
-        resolutions = resolutions.map((r) => {...r, 'date': date}).toList();
+        // Parse JSON if it's a string
+        var data;
+        if (widget.osintData != null &&
+            widget.osintData!.containsKey('dns_data') &&
+            widget.osintData!['dns_data'] is String) {
+          print('Trying to parse dns_data string');
+          data = jsonDecode(widget.osintData!['dns_data']);
+        } else if (attributes.containsKey('resolutions')) {
+          print('Trying to use resolutions from attributes');
+          data = attributes['resolutions'];
+        }
+
+        if (data is List) {
+          for (var item in data) {
+            if (item is Map) {
+              resolutions.add(Map<String, dynamic>.from(item));
+            }
+          }
+          print(
+            'Found ${resolutions.length} DNS records from alternative source',
+          );
+        }
       } catch (e) {
-        print('Error adding date to DNS records: $e');
+        print('Error parsing alternative DNS data: $e');
       }
+    }
+
+    // If still no records, create a fallback
+    if (resolutions.isEmpty) {
+      print('No DNS records found, creating fallback');
+      resolutions = [
+        {
+          'type': 'INFO',
+          'value': 'No domain information available',
+          'ttl': 0,
+          'date': DateTime.now().toIso8601String(),
+          'source': 'None',
+        },
+      ];
     }
 
     return Column(
@@ -602,7 +662,7 @@ class _IpResultsViewState extends State<IpResultsView> {
                 fontSize: 16,
               ),
             ),
-            if (resolutions.isNotEmpty)
+            if (resolutions.isNotEmpty && resolutions[0]['type'] != 'INFO')
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -618,13 +678,18 @@ class _IpResultsViewState extends State<IpResultsView> {
         ),
         const SizedBox(height: 8),
 
-        if (resolutions.isNotEmpty) ...[
+        if (resolutions.isNotEmpty && resolutions[0]['type'] != 'INFO') ...[
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: resolutions.length.clamp(0, 10), // Limit to 10 items
             itemBuilder: (context, index) {
               final resolution = resolutions[index];
+              print('Rendering DNS record in results view: $resolution');
+              final recordType = resolution['type'] ?? 'Unknown';
+              final recordValue = resolution['value'] ?? 'Unknown';
+              final recordSource = resolution['source'] ?? 'Unknown';
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(8),
@@ -644,11 +709,11 @@ class _IpResultsViewState extends State<IpResultsView> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.indigo.withOpacity(0.3),
+                            color: _getRecordTypeColor(recordType),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            resolution['type'] ?? 'A',
+                            recordType,
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -659,7 +724,7 @@ class _IpResultsViewState extends State<IpResultsView> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: SelectableText(
-                            resolution['value'] ?? 'Unknown',
+                            recordValue,
                             style: const TextStyle(color: Colors.white),
                           ),
                         ),
@@ -668,23 +733,22 @@ class _IpResultsViewState extends State<IpResultsView> {
 
                     const SizedBox(height: 4),
 
-                    // Date and TTL
+                    // Source information
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        if (resolution.containsKey('ttl'))
-                          Text(
-                            'TTL: ${resolution['ttl']}',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
+                        Text(
+                          'Source: $recordSource',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
                           ),
+                        ),
                         if (resolution.containsKey('date'))
                           Text(
-                            'Observed: ${resolution['date'].toString().substring(0, 10)}',
+                            resolution['date'].toString().substring(0, 10),
                             style: const TextStyle(
-                              color: Colors.white70,
+                              color: Colors.white60,
                               fontSize: 12,
                             ),
                           ),
@@ -695,67 +759,57 @@ class _IpResultsViewState extends State<IpResultsView> {
               );
             },
           ),
-
-          // Show "View More" button if there are more than 10 records
-          if (resolutions.length > 10)
-            Center(
-              child: TextButton.icon(
-                onPressed: () {
-                  // Show dialog with all resolutions
-                  showDialog(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: const Text('All Domain Resolutions'),
-                          content: Container(
-                            width: double.maxFinite,
-                            height: 400,
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: resolutions.length,
-                              itemBuilder: (context, index) {
-                                final resolution = resolutions[index];
-                                return ListTile(
-                                  title: Text(resolution['value'] ?? 'Unknown'),
-                                  subtitle: Text(
-                                    'Type: ${resolution['type']} - TTL: ${resolution['ttl']}',
-                                  ),
-                                  trailing:
-                                      resolution.containsKey('date')
-                                          ? Text(
-                                            resolution['date']
-                                                .toString()
-                                                .substring(0, 10),
-                                          )
-                                          : null,
-                                );
-                              },
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        ),
-                  );
-                },
-                icon: const Icon(Icons.more_horiz, color: Colors.white),
-                label: const Text(
-                  'View All Resolutions',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
         ] else ...[
-          const Text(
-            'No domain resolution data available',
-            style: TextStyle(color: Colors.white70),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.info_outline, color: Colors.white70),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'No domain resolution data available for this IP address',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ],
     );
+  }
+
+  // Helper method to get a color for different DNS record types
+  Color _getRecordTypeColor(String recordType) {
+    switch (recordType.toUpperCase()) {
+      case 'A':
+        return Colors.blue;
+      case 'AAAA':
+        return Colors.indigo;
+      case 'CNAME':
+        return Colors.purple;
+      case 'MX':
+        return Colors.amber;
+      case 'TXT':
+        return Colors.teal;
+      case 'NS':
+        return Colors.deepOrange;
+      case 'PTR':
+        return Colors.green;
+      case 'SOA':
+        return Colors.brown;
+      case 'SRV':
+        return Colors.cyan;
+      case 'INFO':
+        return Colors.grey;
+      default:
+        return Colors.blueGrey;
+    }
   }
 
   Widget _buildOsintTab(

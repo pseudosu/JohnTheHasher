@@ -1,4 +1,6 @@
 // lib/screens/tabbed_main_screen.dart
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:myapp/helpers/database_helper.dart';
 import 'package:myapp/screens/main_screen.dart';

@@ -1,4 +1,6 @@
 // lib/screens/ip_screen.dart
+// ignore_for_file: unused_local_variable, use_build_context_synchronously, empty_catches
+
 import 'package:flutter/material.dart';
 import 'package:myapp/services/virus_total_ip_service.dart';
 import 'package:myapp/services/osint_service.dart';
@@ -47,7 +49,6 @@ class _IpScreenState extends State<IpScreen> {
         whoisData = await VirusTotalIpService.getWhoisData(ipAddress);
       } catch (e) {
         // WHOIS data is optional, so continue if it fails
-        print('Error getting WHOIS data: $e');
       }
 
       // Get OSINT data in parallel
@@ -83,19 +84,15 @@ class _IpScreenState extends State<IpScreen> {
 
     // Get geolocation data with fallback
     try {
-      print('Fetching geolocation data for IP: $ipAddress');
       var geoData = await OSINTService.getIpGeolocation(ipAddress);
 
       // If primary source fails, try alternative
       if (geoData.containsKey('error') || geoData.isEmpty) {
-        print('Primary geolocation failed, trying alternative source');
         geoData = await OSINTService.getIpGeolocationAlternative(ipAddress);
       }
 
-      print('Final geolocation data: $geoData');
       osintData['geolocation'] = geoData;
     } catch (e) {
-      print('Error getting geolocation data: $e');
       osintData['geolocation'] = OSINTService.getFallbackGeolocation();
     }
 
@@ -104,7 +101,6 @@ class _IpScreenState extends State<IpScreen> {
       final isTorExitNode = await OSINTService.checkTorExitNode(ipAddress);
       osintData['isTorExitNode'] = isTorExitNode;
     } catch (e) {
-      print('Error checking Tor exit node: $e');
       osintData['isTorExitNode'] = false;
     }
 
@@ -113,13 +109,11 @@ class _IpScreenState extends State<IpScreen> {
       final abuseData = await OSINTService.checkAbuseIPDB(ipAddress);
       osintData['abuseipdb'] = abuseData;
     } catch (e) {
-      print('Error checking AbuseIPDB: $e');
       osintData['abuseipdb'] = {
         'data': {'abuseConfidenceScore': 0},
       };
     }
 
-    print('Collected OSINT data: $osintData');
     return osintData;
   }
 
@@ -219,28 +213,18 @@ class _IpScreenContentState extends State<IpScreenContent> {
       Map<String, dynamic>? whoisData;
       try {
         whoisData = await VirusTotalIpService.getWhoisData(ipAddress);
-      } catch (e) {
-        print('Error getting WHOIS data: $e');
-      }
+      } catch (e) {}
 
       // Get DNS records using our new service
       List<Map<String, dynamic>> dnsRecords = [];
       try {
-        print('Fetching DNS records for IP: $ipAddress');
         dnsRecords = await OSINTService.getDnsRecords(ipAddress);
 
         // If the primary DNS lookup fails, try the alternative
         if (dnsRecords.isEmpty) {
-          print(
-            'Primary DNS lookup returned no results, trying alternative...',
-          );
           dnsRecords = await OSINTService.getDnsRecordsAlternative(ipAddress);
         }
-
-        print('Final DNS records count: ${dnsRecords.length}');
-      } catch (e) {
-        print('Error getting DNS records: $e');
-      }
+      } catch (e) {}
 
       // Get OSINT data in parallel
       final osintData = await _collectOsintData(ipAddress);
@@ -280,14 +264,10 @@ class _IpScreenContentState extends State<IpScreenContent> {
 
     // Get geolocation data with multiple sources
     try {
-      print('Fetching geolocation data for IP: $ipAddress');
       var geoData = await OSINTService.getIpGeolocation(ipAddress);
 
       // Check if primary API returned useful data
       if (isEmptyGeolocationData(geoData)) {
-        print(
-          'Primary geolocation returned limited data, trying alternative...',
-        );
         // Small delay to avoid hitting rate limits
         await Future.delayed(Duration(milliseconds: 500));
 
@@ -302,10 +282,8 @@ class _IpScreenContentState extends State<IpScreenContent> {
         }
       }
 
-      print('Final geolocation data: $geoData');
       osintData['geolocation'] = geoData;
     } catch (e) {
-      print('Error getting geolocation data: $e');
       osintData['geolocation'] = OSINTService.getFallbackGeolocation();
     }
 
@@ -314,7 +292,6 @@ class _IpScreenContentState extends State<IpScreenContent> {
       final isTorExitNode = await OSINTService.checkTorExitNode(ipAddress);
       osintData['isTorExitNode'] = isTorExitNode;
     } catch (e) {
-      print('Error checking Tor exit node: $e');
       osintData['isTorExitNode'] = false;
     }
 
@@ -323,13 +300,11 @@ class _IpScreenContentState extends State<IpScreenContent> {
       final abuseData = await OSINTService.checkAbuseIPDB(ipAddress);
       osintData['abuseipdb'] = abuseData;
     } catch (e) {
-      print('Error checking AbuseIPDB: $e');
       osintData['abuseipdb'] = {
         'data': {'abuseConfidenceScore': 0},
       };
     }
 
-    print('Collected OSINT data: $osintData');
     return osintData;
   }
 
